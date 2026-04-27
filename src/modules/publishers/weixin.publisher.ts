@@ -191,10 +191,11 @@ export class WeixinPublisher implements ContentPublisher {
       const formData = new FormData();
 
       if (imageBuffer) {
-        // 如果提供了压缩后的图片buffer，直接使用
+        const imageBytes = new Uint8Array(imageBuffer.byteLength);
+        imageBytes.set(imageBuffer);
         formData.append(
           "media",
-          new Blob([imageBuffer], { type: "image/jpeg" }),
+          new Blob([imageBytes.buffer], { type: "image/jpeg" }),
           `image_${Math.random().toString(36).substring(2, 8)}.jpg`,
         );
       } else {

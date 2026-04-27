@@ -1,50 +1,103 @@
-name: Deploy to Production # 部署到生产环境
+name: Deploy to Production
 
 on:
   push:
+    branches:
+      - main
     tags:
-      - "v*" # 当创建以v开头的tag时触发
-  workflow_dispatch: # 允许手动触发工作流
+      - "v*"
+  workflow_dispatch:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest # 在最新版本的 Ubuntu 运行器上运行
+    runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4 # 检出代码
-
-      - name: Create .env file # 创建环境配置文件
-        run: |
-          cat > .env << EOL
-          # 数据库配置
-          ENABLE_DB=true
-          DB_HOST=${{ secrets.DB_HOST }}
-          DB_PORT=${{ secrets.DB_PORT }}
-          DB_USER=${{ secrets.DB_USER }}
-          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-          DB_DATABASE=${{ secrets.DB_DATABASE }}
-          EOL
-
-      - name: Setup SSH # 设置 SSH
+      - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Deploy to Server # 部署到服务器
+      - name: Deploy to server
         run: |
-          ssh -i ~/.ssh/id_rsa "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" "
-            cd ~/app || mkdir -p ~/app && cd ~/app
-            rm -rf ./* ./.* 2>/dev/null || true
-            git clone https://github.com/liyown/ai-trend-publish
+          ssh -i ~/.ssh/id_rsa "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" << 'EOF'
+            set -e
+
+            export DENO_INSTALL="$HOME/.deno"
+            export PATH="$DENO_INSTALL/bin:$PATH"
+
+            mkdir -p ~/app
+            cd ~/app
+
+            if [ ! -d ai-trend-publish/.git ]; then
+              git clone https://github.com/hooper-lee/ai-trend-publish.git ai-trend-publish
+            fi
+
             cd ai-trend-publish
-          "
-          scp -i ~/.ssh/id_rsa .env "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:~/app/ai-trend-publish/"
-          ssh -i ~/.ssh/id_rsa "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" "
-            cd ~/app/ai-trend-publish
-            pm2 delete trend-finder 2>/dev/null || true
-            source ~/.bashrc
-            pm2 start --name trend-finder '/root/.deno/bin/deno  run --allow-all start'
-            echo '部署完成'
-          "
+            git fetch origin main
+            git reset --hard origin/main
+
+          cat > .env << 'ENV_EOF'
+          SERVER_API_KEY=${{ secrets.SERVER_API_KEY }}
+          OPENAI_BASE_URL=${{ secrets.OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
+          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL=${{ secrets.OPENAI_MODEL || 'gpt-3.5-turbo' }}
+          DEEPSEEK_BASE_URL=${{ secrets.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1' }}
+          DEEPSEEK_API_KEY=${{ secrets.DEEPSEEK_API_KEY }}
+          DEEPSEEK_MODEL=${{ secrets.DEEPSEEK_MODEL || 'deepseek-chat' }}
+          QWEN_BASE_URL=${{ secrets.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1' }}
+          QWEN_API_KEY=${{ secrets.QWEN_API_KEY }}
+          QWEN_MODEL=${{ secrets.QWEN_MODEL || 'qwen-max' }}
+          XUNFEI_API_KEY=${{ secrets.XUNFEI_API_KEY }}
+          CUSTOM_LLM_BASE_URL=${{ secrets.CUSTOM_LLM_BASE_URL }}
+          CUSTOM_LLM_API_KEY=${{ secrets.CUSTOM_LLM_API_KEY }}
+          CUSTOM_LLM_MODEL=${{ secrets.CUSTOM_LLM_MODEL }}
+          DEFAULT_LLM_PROVIDER=${{ secrets.DEFAULT_LLM_PROVIDER || 'DEEPSEEK' }}
+          DASHSCOPE_API_KEY=${{ secrets.DASHSCOPE_API_KEY }}
+          AI_CONTENT_RANKER_LLM_PROVIDER=${{ secrets.AI_CONTENT_RANKER_LLM_PROVIDER || 'DEEPSEEK:deepseek-reasoner' }}
+          AI_SUMMARIZER_LLM_PROVIDER=${{ secrets.AI_SUMMARIZER_LLM_PROVIDER || 'QWEN:qwen-max' }}
+          ARTICLE_TEMPLATE_TYPE=${{ secrets.ARTICLE_TEMPLATE_TYPE || 'default' }}
+          HELLOGITHUB_TEMPLATE_TYPE=${{ secrets.HELLOGITHUB_TEMPLATE_TYPE || 'default' }}
+          AIBENCH_TEMPLATE_TYPE=${{ secrets.AIBENCH_TEMPLATE_TYPE || 'default' }}
+          ENABLE_DEDUPLICATION=${{ secrets.ENABLE_DEDUPLICATION || 'false' }}
+          DASHSCOPE_EMBEDDING_BASE_URL=${{ secrets.DASHSCOPE_EMBEDDING_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1' }}
+          DASHSCOPE_EMBEDDING_API_KEY=${{ secrets.DASHSCOPE_EMBEDDING_API_KEY }}
+          DASHSCOPE_EMBEDDING_MODEL=${{ secrets.DASHSCOPE_EMBEDDING_MODEL || 'text-embedding-v3' }}
+          1_of_week_workflow=${{ secrets.MONDAY_WORKFLOW || 'weixin-article-workflow' }}
+          2_of_week_workflow=${{ secrets.TUESDAY_WORKFLOW || 'weixin-aibench-workflow' }}
+          3_of_week_workflow=${{ secrets.WEDNESDAY_WORKFLOW || 'weixin-hellogithub-workflow' }}
+          4_of_week_workflow=${{ secrets.THURSDAY_WORKFLOW || 'weixin-article-workflow' }}
+          5_of_week_workflow=${{ secrets.FRIDAY_WORKFLOW || 'weixin-article-workflow' }}
+          6_of_week_workflow=${{ secrets.SATURDAY_WORKFLOW || 'weixin-article-workflow' }}
+          7_of_week_workflow=${{ secrets.SUNDAY_WORKFLOW || 'weixin-article-workflow' }}
+          ARTICLE_NUM=${{ secrets.ARTICLE_NUM || '10' }}
+          ENABLE_DB=${{ secrets.ENABLE_DB || 'false' }}
+          DB_HOST=${{ secrets.DB_HOST }}
+          DB_PORT=${{ secrets.DB_PORT }}
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DB_DATABASE=${{ secrets.DB_DATABASE }}
+          WEIXIN_APP_ID=${{ secrets.WEIXIN_APP_ID }}
+          WEIXIN_APP_SECRET=${{ secrets.WEIXIN_APP_SECRET }}
+          NEED_OPEN_COMMENT=${{ secrets.NEED_OPEN_COMMENT || 'false' }}
+          ONLY_FANS_CAN_COMMENT=${{ secrets.ONLY_FANS_CAN_COMMENT || 'false' }}
+          AUTHOR=${{ secrets.AUTHOR }}
+          FIRE_CRAWL_API_KEY=${{ secrets.FIRE_CRAWL_API_KEY }}
+          JINA_API_KEY=${{ secrets.JINA_API_KEY }}
+          X_API_BEARER_TOKEN=${{ secrets.X_API_BEARER_TOKEN }}
+          ENABLE_BARK=${{ secrets.ENABLE_BARK || 'false' }}
+          BARK_URL=${{ secrets.BARK_URL }}
+          ENABLE_DINGDING=${{ secrets.ENABLE_DINGDING || 'false' }}
+          DINGDING_WEBHOOK=${{ secrets.DINGDING_WEBHOOK }}
+          ENABLE_FEISHU=${{ secrets.ENABLE_FEISHU || 'false' }}
+          FEISHU_WEBHOOK_URL=${{ secrets.FEISHU_WEBHOOK_URL }}
+          ENV_EOF
+
+            deno cache src/index.ts
+
+            pm2 delete ai-trend-publish 2>/dev/null || true
+            pm2 start "deno task start" --name ai-trend-publish
+            pm2 save
+          EOF
